@@ -40,6 +40,10 @@ function loadApp(files) {
     },
   };
 
+  // jq-repeat.js (loaded in some integration tests) uses Mustache for its
+  // `{{field}}` templating, exactly as the browser does via the CDN script.
+  window.Mustache = require('mustache');
+
   for (const file of files) {
     const code = fs.readFileSync(file, 'utf8');
     window.eval(code);

@@ -1,6 +1,6 @@
 {
   "name": "@simpleworkjs/frontend",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Browser-side JavaScript package for SimpleWorkJS apps",
   "main": "index.js",
   "scripts": {
@@ -28,6 +28,7 @@
   },
   "devDependencies": {
     "jquery": "^4.0.0",
-    "jsdom": "^29.1.1"
+    "jsdom": "^29.1.1",
+    "mustache": "^4.2.0"
   }
 }

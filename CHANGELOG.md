@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.2.1
+
+### Fixed
+
+- **Live updates now work for creates, edits, and deletes** (`lib/app.render.js`):
+  the table/card renderers patched individual rows via jq-repeat's
+  `scope.update()`/`scope.remove()`, which did not reliably re-render live rows —
+  a record created in another session didn't appear, and edits to a live row
+  weren't reflected. On any live change the renderer now re-fetches the model's
+  list and hands it to jq-repeat's `replace()` (the reliable render path). New
+  `_reload()` helper; verified end-to-end in a browser (create/update/delete).
+- **Password (and other write-only) fields now appear on create/edit forms**
+  (`lib/app.render.js`): the form builder filtered out every private field, so a
+  `password-bcrypt` field (private) had no input — you couldn't set a password
+  when creating or editing a user. It now includes `writeOnly` fields (see
+  `@simpleworkjs/orm` ≥ 0.2.2), marks them required only on create, and drops an
+  empty value on edit (blank = keep current).
+
 ## 0.2.0
 
 ### Added
