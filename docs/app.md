@@ -347,7 +347,10 @@ in its bound scopes.
     title: {/* field schema, below */},
     // ...
   },
-  paths: {/* REST paths */},
+  paths: {
+    base: [/* CRUD REST paths */],
+    methods: [/* exposed custom methods, if any (see below) */],
+  },
 }
 ```
 
@@ -369,3 +372,20 @@ Each entry in `fields` has this shape (from the ORM's field `toSchema()`):
 | `validate` | Validators. |
 | `foreignKey` | Relationship fields only — the FK column (e.g. `ownerId`). |
 | `references` | Relationship fields only — `{type: 'hasOne'\|'hasMany', model, as, localKey, remoteKey, nullable}`. |
+
+### Exposed methods (`paths.methods`)
+
+If a model declares custom endpoints (see the backend's "Exposed methods"),
+`OPTIONS` advertises them under `paths.methods` so a client can discover and
+call them. Each entry:
+
+| Key | Description |
+|-----|-------------|
+| `method` | The model method name. |
+| `route` | URL segment appended to the model path. |
+| `verb` | HTTP verb (`get`, `post`, `put`, `delete`, …). |
+| `kind` | `'instance'` (runs on one record, mounted under `/:pk`) or `'static'` (runs on the model). |
+| `path` | Full URL template, e.g. `/Thread/:id/invite` or `/Thread/search`. |
+| `args` | `{from: 'body'\|'params'\|'query', names?: [...]}` or `null`. |
+| `permission` | Permission token required to call it. |
+| `description` | Human-readable summary (`''` if none). |
