@@ -1,0 +1,29 @@
+{
+  "name": "@simpleworkjs/frontend",
+  "version": "0.1.0",
+  "description": "Browser-side JavaScript package for SimpleWorkJS apps",
+  "main": "index.js",
+  "scripts": {
+    "test": "node --test test/**/*.test.js"
+  },
+  "keywords": [
+    "simpleworkjs",
+    "frontend",
+    "jquery",
+    "bootstrap",
+    "socket.io"
+  ],
+  "author": "William Mantly",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/simpleworkjs/frontend.git"
+  },
+  "bugs": {
+    "url": "https://github.com/simpleworkjs/frontend/issues"
+  },
+  "homepage": "https://github.com/simpleworkjs/frontend#readme",
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
