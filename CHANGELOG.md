@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.2.2
+
+### Added
+
+- **Collection card view (`app.render.collection`), now the default render mode.**
+  One card per collection: header with a title and Debug / Permissions / New
+  actions; a list body with View/Edit/Delete per row; a paginated footer
+  ("Showing X–Y of N" + Prev/Next). Page size comes from the model
+  (`display.pageSize`, default 20).
+- **`app.modal`** — a small Bootstrap-modal helper (`open`/`close`/`body`) used
+  for the New/Edit forms, the Debug panel, and the (read-only) Permissions
+  viewer. `close()` force-hides as a fallback so the modal can't get stuck open
+  when the fade `transitionend` doesn't fire (reduced motion / backgrounded tab).
+- **`app.render.form` modal mode** (`{modal, onSuccess}`): saves without a
+  full-page redirect, closing the modal and letting live sync refresh the list.
+- **`app.model.lastEvent`** — timestamp of the last WebSocket event per model,
+  shown in the Debug panel. `app.model.list` forwards `{page, pageSize}`.
+
+### Fixed
+
+- **Forms submitted empty strings for unset fields** (an unselected foreign-key
+  dropdown or a blank number field), which failed server-side FK/number
+  validation. Empty inputs are now omitted from the payload.
+
 ## 0.2.1
 
 ### Fixed

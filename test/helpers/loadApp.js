@@ -38,6 +38,16 @@ function loadApp(files) {
       this.el = el;
       this.show = function () { el.classList.add('show'); };
     },
+    // Minimal Bootstrap Modal stub — app.modal only calls
+    // getOrCreateInstance(el).show()/.hide().
+    Modal: {
+      getOrCreateInstance: function (el) {
+        return {
+          show: function () { el.classList.add('show'); el.style.display = 'block'; },
+          hide: function () { el.classList.remove('show'); el.style.display = 'none'; },
+        };
+      },
+    },
   };
 
   // jq-repeat.js (loaded in some integration tests) uses Mustache for its

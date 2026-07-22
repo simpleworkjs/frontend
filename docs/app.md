@@ -14,7 +14,8 @@ covers the entire public surface.
 - [`app.pubsub`](#apppubsub) — in-browser event bus
 - [`app.socket`](#appsocket) — Socket.IO client
 - [`app.sync`](#appsync) — server events → local refresh events
-- [`app.render`](#apprender) — schema-driven Bootstrap UI
+- [`app.render`](#apprender) — schema-driven Bootstrap UI (collection cards, forms)
+- [`app.modal`](#appmodal) — reusable Bootstrap modal
 - [`app.messages`](#appmessages) — action messages, confirms, toasts
 - [`app.util`](#apputil) — helpers
 - [`app.custom`](#appcustom) — per-page initializer registry
@@ -118,6 +119,7 @@ A schema-aware client layered on `app.api`. On startup it reads the API root
 | `schemas` | `object` | `{[modelName]: schemaResponse}` — cached `OPTIONS` responses. |
 | `cache` | `object` | `{[modelName]: {}}` — per-model record cache (reserved for future use). |
 | `isReady` | `boolean` | `true` once all schemas have loaded. |
+| `lastEvent` | `object` | `{[modelName]: ms}` — timestamp of the last WebSocket event per model (shown in the Debug panel). |
 | `readyCallbacks` | `array` | Internal queue for `ready()`. |
 
 ### Methods
@@ -127,7 +129,7 @@ A schema-aware client layered on `app.api`. On startup it reads the API root
 | `ready(cb)` | — | Run `cb` once schemas are loaded (immediately if already ready). |
 | `init()` | jQuery promise | Load the API root + all schemas. Called automatically on `app.ready`. |
 | `schema(name)` | schema \| `undefined` | The cached `OPTIONS` response for a model. |
-| `list(name, params?)` | promise → `{results: [...]}` | List records; `params` become query args. |
+| `list(name, params?)` | promise → `{results, page, pageSize, total, pageCount}` | List a page; `params` (e.g. `{page, pageSize, where}`) become query args. |
 | `get(name, pk)` | promise → `{data: {...}}` | Fetch one record. |
 | `create(name, data)` | promise → `{data: {...}}` | Create. |
 | `update(name, pk, data)` | promise → `{data: {...}}` | Update. |
@@ -215,15 +217,35 @@ HTML-escaped.
 
 | Method | Description |
 |--------|-------------|
-| `build(selector)` | For each matched element, read its `data-sw-*` attributes and render the requested `table` / `card` / `form`. |
+| `build(selector)` | For each matched element, read its `data-sw-*` attributes and render the requested mode. **Default mode is `collection`.** |
+| `collection($el, name, schema)` | **The default view.** One card per collection (below). |
 | `table($el, name, schema)` | Render a Bootstrap table with View/Edit/Delete actions. |
 | `cards($el, name, schema)` | Render a responsive card grid. |
-| `form($el, name, schema, pk?)` | Render a create form, or an edit form when `pk` is given. |
+| `form($el, name, schema, pk?, options?)` | Render a create form, or an edit form when `pk` is given. `options` = `{modal, onSuccess}` (below). |
+| `_reload(name, scopeName)` | Internal: re-fetch a model's list and `replace()` the bound jq-repeat scope. |
 | `_teardown($el)` | Internal: remove the pubsub subscriptions a previous `build()` attached to `$el` (idempotent re-builds). |
+
+### The `collection` view
+
+The default. Renders one Bootstrap card per collection:
+
+- **Header** — the collection title, plus **Debug**, **Permissions**, and **New**
+  action buttons.
+- **Body** — a paginated jq-repeat list of rows, each with **View**, **Edit**
+  (modal), and **Delete** (confirm) actions.
+- **Footer** — "Showing X–Y of N" and Prev/Next. Page size comes from
+  `schema.display.pageSize` (default 20). The list re-fetches the current page on
+  every live change.
+- **Debug** button → a modal with the model's endpoints, permissions, field
+  schema, and the last WebSocket update time (`app.model.lastEvent`).
+- **Permissions** button → a read-only modal listing the required token(s) per
+  action (from OPTIONS `permissions`) with a legend. (Editing arrives when
+  permissions become DB-backed and runtime-configurable.)
 
 Typical usage is fully declarative — mark up an element and call `build()`:
 
 ```html
+<div data-sw-model="Task"></div>            <!-- defaults to the collection view -->
 <div data-sw-model="Task" data-sw-mode="table"></div>
 ```
 
@@ -239,13 +261,30 @@ Behavior notes:
   View/Edit/Delete actions, and wires the Delete button through
   `app.messages.confirm` + `app.model.remove` + a toast.
 - **Cards** use the model's `display.titleField` as the card title.
-- **Form** renders one input per non-private, non-primary-key field, chooses the
-  control from the field's `htmlType` (`checkbox`, `textarea`, otherwise a typed
-  `<input>`), and for `hasOne` fields renders a `<select>` populated from the
-  referenced model's records. On submit it calls `create`/`update`, toasts the
-  result, and redirects to the model's list page.
+- **Form** renders one input per settable field (private-but-`writeOnly` fields
+  like `password` are included), chooses the control from the field's `htmlType`
+  (`checkbox`, `textarea`, otherwise a typed `<input>`), and for `hasOne` fields
+  renders a `<select>` populated from the referenced model's records. Empty
+  inputs are omitted from the payload. On submit it calls `create`/`update` and
+  toasts the result. By default it redirects to the model's list page; in
+  **modal mode** (`form($el, name, schema, pk, {modal: true, onSuccess})`) it
+  instead calls `onSuccess` (the collection view uses this to close the modal —
+  live sync refreshes the list).
 - Re-running `build()` on the same element is safe — it tears down the previous
   subscriptions first.
+
+---
+
+## `app.modal`
+
+A thin wrapper over Bootstrap's modal, reused for the New/Edit forms, the Debug
+panel, and the Permissions viewer. One modal element is appended to `<body>`.
+
+| Method | Description |
+|--------|-------------|
+| `open({title, bodyHtml, size, onShown})` | Show the modal with the given content; returns the `$body` jQuery element. `size` is `'sm'`/`'lg'`/`'xl'`. |
+| `close()` | Hide the modal. Force-hides as a fallback if Bootstrap's fade `transitionend` never fires (reduced motion / a backgrounded tab), so it can't get stuck open. |
+| `body()` | The current modal `$body`. |
 
 ---
 
@@ -330,7 +369,7 @@ in its bound scopes.
 | Attribute | On | Values | Meaning |
 |-----------|----|--------|---------|
 | `data-sw-model` | render target | model name | Which model to render. |
-| `data-sw-mode` | render target | `table` \| `card` \| `form` | Render style (default `table`). |
+| `data-sw-mode` | render target | `collection` \| `table` \| `card` \| `form` | Render style (default `collection`). |
 | `data-sw-pk` | render target (form) | primary key | Edit an existing record; omit to create. |
 | `data-sw-custom` | `<body>` | initializer name | Auto-run `app.custom.run(name)` on load. |
 
@@ -342,10 +381,13 @@ in its bound scopes.
 {
   name: 'Task',   // model name
   pk: 'id',       // primary-key field name
-  display: {name, titleField, ...},
+  display: {name, titleField, pageSize, ...},  // pageSize: default rows per page
   fields: {       // <-- the field map (read from `.fields`)
     title: {/* field schema, below */},
     // ...
+  },
+  permissions: {  // required token(s) per action (the Permissions viewer reads this)
+    read: ['user'], create: ['admin'], update: ['admin', 'owner'], delete: ['admin'],
   },
   paths: {
     base: [/* CRUD REST paths */],
@@ -353,6 +395,9 @@ in its bound scopes.
   },
 }
 ```
+
+The **list** endpoint (`app.model.list(name, {page, pageSize, where})`) responds
+with `{results, page, pageSize, total, pageCount}`.
 
 Each entry in `fields` has this shape (from the ORM's field `toSchema()`):
 
