@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.4
+
+### Changed
+
+- Republish to keep the frontend version aligned with the rest of the 0.2.x
+  permission-stack release (backend 0.2.5 requires `frontend ^0.2.3`; this is a
+  no-op bump so the shipped stack advertises a single, current set of versions).
+  No code changes from 0.2.3.
+
 ## 0.2.3
 
 ### Changed
