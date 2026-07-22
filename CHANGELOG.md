@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.3
+
+### Changed
+
+- **The collection Permissions modal is now an editable grid** (was read-only).
+  It shows the model's `{owner, group, everyone} × {create, read, update, delete}`
+  access grants; admins (per `app.currentUser.isAdmin`) can toggle and **Save**
+  (PUT `/api/_access/:model`), others see it read-only. Grants are fetched live
+  from the server so concurrent edits are reflected.
+
 ## 0.2.2
 
 ### Added

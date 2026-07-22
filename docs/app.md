@@ -386,8 +386,13 @@ in its bound scopes.
     title: {/* field schema, below */},
     // ...
   },
-  permissions: {  // required token(s) per action (the Permissions viewer reads this)
-    read: ['user'], create: ['admin'], update: ['admin', 'owner'], delete: ['admin'],
+  permissions: {  // per-action token summary (for the API docs / debug views)
+    read: ['user'], create: ['admin'], update: ['owner'], delete: ['admin'],
+  },
+  access: {       // tiered grants the Permissions editor reads/writes
+    owner:    {create: false, read: true, update: true, delete: true},
+    group:    {create: false, read: false, update: false, delete: false},
+    everyone: {create: false, read: true, update: false, delete: false},
   },
   paths: {
     base: [/* CRUD REST paths */],
