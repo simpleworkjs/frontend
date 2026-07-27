@@ -19,6 +19,7 @@ covers the entire public surface.
 - [`app.messages`](#appmessages) — action messages, confirms, toasts
 - [`app.util`](#apputil) — helpers
 - [`app.custom`](#appcustom) — per-page initializer registry
+- [`$.fn.validate`](#fnvalidate) — attribute-driven form validation
 - [Event topics](#event-topics)
 - [`data-sw-*` attributes](#data-sw-attributes)
 - [Schema and field shape](#schema-and-field-shape)
@@ -44,6 +45,7 @@ their third-party dependencies:
 <script src="/lib/js/app.render.js"></script>   <!-- render -->
 <script src="/lib/js/app.messages.js"></script> <!-- messages -->
 <script src="/lib/js/app.custom.js"></script>   <!-- custom -->
+<script src="/lib/js/app.validate.js"></script> <!-- $.fn.validate; standalone, no app.* namespace -->
 ```
 
 | Dependency | Required by | Notes |
@@ -348,6 +350,61 @@ app.custom.register('dashboard', function () {
 ```html
 <body data-sw-custom="dashboard">
 ```
+
+---
+
+## `$.fn.validate`
+
+`[validate]` attribute-driven client-side form validation, mirroring (not
+replacing) your server-side checks. Standalone — attaches to `jQuery`
+directly, no `app.*` namespace, and has no dependency on any other file here.
+
+| Member | Description |
+|--------|-------------|
+| `$(form).validate(event?)` | Validate every `[validate]` field inside; returns `true`/`false`. Calls `event.preventDefault()` on failure if an event is passed. |
+| `$(field).validateField()` | Validate a single field per its `validate="rule[:options]"` attribute. |
+| `$(el).validateClear()` | Clear `is-valid`/`is-invalid` from every `input` inside `el`. |
+| `$.validateSettings({rule: {...}})` | Register additional named rules (deep-merged with the built-ins). |
+| `$.validateInit()` | Wire every `<form action="...">` on the page to validate on `submit`. |
+
+Built-in rules:
+
+| Rule | Checks |
+|------|--------|
+| `eq:<fieldName>` | Value equals the named field's current value (e.g. password confirmation). |
+| `user` | uid-style identifier: `^[a-z0-9_.@-]{1,32}$`. |
+| `password` | ≥ 8 characters, and either ≥ 12 characters or at least 3 of {lowercase, uppercase, number, symbol}. |
+| `ip` | Dotted-quad IPv4. |
+
+A numeric `options` value (e.g. `validate="somefield:8"`) is treated as a
+minimum length and checked before the named rule runs.
+
+```html
+<div class="form-group">
+  <input name="password" validate="password">
+  <b class="invalid-feedback"></b>
+</div>
+<div class="form-group">
+  <input name="confirm" validate="eq:password">
+  <b class="invalid-feedback"></b>
+</div>
+```
+
+Register app-specific rules the same way — return a falsy value when valid, a
+message string when not:
+
+```js
+$.validateSettings({
+  rule: {
+    hostname: function(value){
+      if (!/^[a-z0-9.-]+$/i.test(value)) return 'Enter a valid hostname';
+    }
+  }
+});
+```
+
+A failed rule writes its message into the nearest `b.invalid-feedback` and
+adds `is-invalid` to the field; a passing rule adds `is-valid`.
 
 ---
 

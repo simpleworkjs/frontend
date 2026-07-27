@@ -21,6 +21,7 @@ Everything hangs off a global `app` object:
 | `app.messages` | Contextual action messages, confirm dialogs, and toasts. |
 | `app.util` | Small helpers (`escapeHtml`, `formToObject`, `capitalize`, `uuid`). |
 | `app.ready(cb)` | Run a callback once the DOM and socket are ready. |
+| `$.fn.validate` / `$.validateSettings` | `[validate]` attribute-driven client-side form validation (mirrors, doesn't replace, server-side checks). |
 
 ## Loading the assets
 
@@ -35,6 +36,7 @@ When you use [`@simpleworkjs/backend`](https://github.com/simpleworkjs/backend),
 <script src="/lib/js/app.sync.js"></script>
 <script src="/lib/js/app.render.js"></script>
 <script src="/lib/js/app.custom.js"></script>
+<script src="/lib/js/app.validate.js"></script>
 ```
 
 You can also resolve asset paths from Node (e.g. to bundle them yourself):
@@ -163,6 +165,49 @@ app.util.formToObject($form);     // serialize a form to a plain object
 app.util.capitalize('task');      // 'Task'
 app.util.uuid();                  // v4 UUID
 ```
+
+## `$.fn.validate`
+
+Attribute-driven client-side form validation, mirroring (not replacing) your
+server-side checks:
+
+```html
+<form>
+  <div class="form-group">
+    <input name="password" validate="password">
+    <b class="invalid-feedback"></b>
+  </div>
+  <div class="form-group">
+    <input name="confirm" validate="eq:password">
+    <b class="invalid-feedback"></b>
+  </div>
+</form>
+```
+
+```js
+$('form').on('submit', function(event){
+  if (!$(this).validate(event)) return; // event.preventDefault() already called
+});
+// or: $.validateInit(); // auto-wires every <form action="..."> on submit
+```
+
+Built-in rules: `eq:<fieldName>` (must match another field), `user` (uid-style
+identifier), `password` (length/character-class policy), `ip` (dotted-quad).
+Register your own with `$.validateSettings`:
+
+```js
+$.validateSettings({
+  rule: {
+    hostname: function(value){
+      if (!/^[a-z0-9.-]+$/i.test(value)) return 'Enter a valid hostname';
+    }
+  }
+});
+```
+
+A rule function returns a falsy value when the field is valid, or a message
+string when it isn't; the message is written into the nearest
+`b.invalid-feedback` and the field gets `is-invalid`/`is-valid`.
 
 ## License
 

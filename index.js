@@ -15,6 +15,7 @@
  *   lib/app.sync.js     — live sync over Socket.IO
  *   lib/app.custom.js   — named custom initializer registry
  *   lib/app.messages.js — action messages, confirmations, page-wide toasts
+ *   lib/app.validate.js — [validate] attribute-driven form validation
  */
 
 const path = require('path');
@@ -32,5 +33,6 @@ module.exports = {
     sync: assetPath('app.sync.js'),
     custom: assetPath('app.custom.js'),
     messages: assetPath('app.messages.js'),
+    validate: assetPath('app.validate.js'),
   },
 };

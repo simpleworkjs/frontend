@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.2.5
+
+### Added
+
+- **`lib/app.validate.js`** — `[validate]` attribute-driven client-side form
+  validation (`$.fn.validate`, `$.fn.validateField`, `$.validateSettings`,
+  `$.validateInit`), upstreamed from the theta42 apps' identical vendored
+  `val.js`. Standalone (no `app.*` namespace, no dependency on `app.js`).
+  Ships with generic rules only (`eq`, `user`, `password`, `ip`); app-specific
+  rules (e.g. hostname/wildcard validation) stay app-side via
+  `$.validateSettings`. Fixed a latent bug in the ported `validateInit`: its
+  submit handler called `.validate(settingsObj, event)`, but `validate()` only
+  ever took one argument (`event`), so the second argument was always silently
+  dropped.
+
 ## 0.2.4
 
 ### Changed
