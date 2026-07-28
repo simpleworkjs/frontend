@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.2.6
+
+### Added
+
+- **`app.modal` standardized entity-modal support**: optional `tabs` (nav-tabs
+  + tab-content, matching the pattern already used for proxy's host modal),
+  optional `footer` (`metaHtml` left / `buttonsHtml` right — the footer
+  element is entirely absent when omitted, and any stale footer from a
+  previous `open()` call is removed so it can't leak into a later bare
+  caller), and optional `url` (pushes a linkable path on open, restores the
+  prior path on close, and closes the modal on browser Back/Forward via
+  `popstate` instead of re-pushing history). All three are opt-in — existing
+  `{title, bodyHtml, size, onShown}` callers are unaffected.
+- **`app.modal.showTab(id)`**, **`app.modal.on(event, selector, handler)`**
+  (a delegated binding that survives `open()`'s per-call DOM rebuild — the one
+  pattern callers should reach for instead of binding directly to inner
+  elements, which silently stop firing after the first open),
+  **`app.modal.deepLinkSlug(basePath)`** (slug from `location.pathname` for a
+  `url`-tracked modal's deep-link open-on-load), **`app.modal.formatAudit(record, {formatDate})`**
+  (standard "Created by X on Y · Updated by X on Y" footer text for the
+  `created_by`/`created_on`/`updated_by`/`updated_on` convention already used
+  by several models across the theta42 apps), and **`app.modal.footerButtons({onSave, saveLabel, closeLabel, extraHtml})`**
+  (the standard Close+Save button pair).
+
 ## 0.2.5
 
 ### Added
