@@ -48,6 +48,31 @@ function loadApp(files) {
         };
       },
     },
+    // Minimal Bootstrap Tab stub — app.modal.showTab only calls
+    // getOrCreateInstance(el).show(), which should mirror data-bs-toggle="tab"
+    // semantics: activate this pane/button, deactivate its siblings.
+    Tab: {
+      getOrCreateInstance: function (el) {
+        return {
+          show: function () {
+            const nav = el.closest('.nav-tabs');
+            if (nav) {
+              nav.querySelectorAll('.nav-link').forEach((btn) => btn.classList.remove('active'));
+            }
+            el.classList.add('active');
+            const targetSel = el.getAttribute('data-bs-target');
+            const pane = targetSel && el.ownerDocument.querySelector(targetSel);
+            if (pane) {
+              const content = pane.closest('.tab-content');
+              if (content) {
+                content.querySelectorAll('.tab-pane').forEach((p) => p.classList.remove('show', 'active'));
+              }
+              pane.classList.add('show', 'active');
+            }
+          },
+        };
+      },
+    },
   };
 
   // jq-repeat.js (loaded in some integration tests) uses Mustache for its
