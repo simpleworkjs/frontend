@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.7
+
+### Added
+
+- **`app.util.revealItem(el)`**: scrolls a just-added/-edited element into
+  view (`scrollIntoView({behavior: 'smooth', block: 'center'})`) and flashes
+  its background using a Bootstrap 5 CSS variable, fading back to normal.
+  Accepts a jQuery object or a raw DOM node (e.g. `jq-repeat`'s
+  `item.__jq_$el`) — the standard "show the user where their change landed"
+  behavior for post-create/edit list refreshes.
+
 ## 0.2.6
 
 ### Added
