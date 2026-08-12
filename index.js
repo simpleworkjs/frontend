@@ -13,6 +13,7 @@
  *   lib/app.model.js    — model schema cache and CRUD helpers
  *   lib/app.render.js   — auto-build tables/cards/forms from OPTIONS schema
  *   lib/app.sync.js     — live sync over Socket.IO
+ *   lib/app.filter.js   — search/facet filtering for jq-repeat scopes
  *   lib/app.custom.js   — named custom initializer registry
  *   lib/app.messages.js — action messages, confirmations, page-wide toasts
  *   lib/app.validate.js — [validate] attribute-driven form validation
@@ -31,6 +32,7 @@ module.exports = {
     model: assetPath('app.model.js'),
     render: assetPath('app.render.js'),
     sync: assetPath('app.sync.js'),
+    filter: assetPath('app.filter.js'),
     custom: assetPath('app.custom.js'),
     messages: assetPath('app.messages.js'),
     validate: assetPath('app.validate.js'),
