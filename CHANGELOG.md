@@ -1,5 +1,58 @@
 # Changelog
 
+## 0.3.0
+
+### Added
+
+- **`app.sync.bind(scope, model, options)`**: live updates for a table you
+  wrote yourself. Previously the only way to get a self-updating list was to
+  build it with `app.render`; any hand-written `jq-repeat` view had to
+  re-implement the listen/parse/patch dance per page, so in practice most
+  pages simply never updated. `bind()` needs nothing but a `jq-repeat` scope
+  and a pubsub bus — no `app.render`, no `app.model`, no generated REST
+  routes. Options: `key`, `parse`, `filter`, `fetch`, `reveal`, `onChange`.
+  Returns `{unbind()}`.
+  - Patches the one changed row instead of reloading the list, so scroll
+    position, checkbox selection and open dropdowns survive another user's
+    edit — and one person's change doesn't cost every other viewer a full
+    refetch.
+  - Normalizes both event dialects in circulation: the framework's
+    `model:<Model>:<action>` with a `{model, action, pk, data}` payload, and
+    the `model:<Model>:<action>:<pk>` form carrying a bare record. Works on
+    either an `app.pubsub` bus or a plain `app.subscribe` one, so the same
+    file drops into apps that load only part of this package.
+  - Always looks rows up by explicit key. `jq-repeat` reads a lone numeric
+    argument as a *positional index*, so any model with an integer primary key
+    would otherwise patch row 5 rather than the record with id 5.
+  - A pk containing `:` (LDAP DNs, IPv6 literals) is rejoined rather than
+    truncated at the first colon.
+
+- **`app.filter`**: search and facet filtering for a `jq-repeat` scope, with
+  `bind(scope, options)` and `live(scope, model, options)`.
+  - Chooses client- or server-side from the data rather than per-view config:
+    a list filters in the browser until it outgrows `threshold`, then queries
+    the server (debounced, discarding out-of-order responses). The same view
+    is a 12-row table on one install and a 12,000-row table on another, and
+    neither should need a code change. With no `fetch` it stays client-side at
+    any size rather than silently filtering nothing.
+  - Client mode hides non-matching rows instead of removing them, so clearing
+    the search restores them instantly with no refetch and no DOM rebuild.
+  - Search spans several fields, including nested paths (`domain.provider`),
+    case-insensitively; `facets` add named predicates that AND with it.
+    Optional `count` element renders a "3 of 40 shown" readout.
+  - `live()` wires filtering and live sync together: a row arriving over the
+    socket appears only if it matches the filter that's currently active, and
+    is still present — ready to show — once that filter is cleared.
+
+### Testing
+
+- Integration tests run against the real `jq-repeat` (added as a
+  devDependency) rather than a scope stand-in. A stub can agree with a wrong
+  assumption; the library cannot — this is what caught the numeric-primary-key
+  bug above.
+- `npm test` now runs the whole `test/` directory (it previously matched
+  nothing and exited non-zero).
+
 ## 0.2.7
 
 ### Added

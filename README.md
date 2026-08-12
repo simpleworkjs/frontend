@@ -16,7 +16,8 @@ Everything hangs off a global `app` object:
 | `app.model` | Schema-aware model client (list/get/create/update/remove) with a schema cache. |
 | `app.pubsub` | In-browser publish/subscribe bus (regex topic matching). |
 | `app.socket` | Socket.IO client, wired into `app.pubsub` for live model events. |
-| `app.sync` | Bridges incoming `model:*` events into local refresh events. |
+| `app.sync` | Live updates: bridges incoming `model:*` events into refresh events, and binds a jq-repeat scope to a model with `app.sync.bind()`. |
+| `app.filter` | Search/facet filtering for a jq-repeat scope, client-side or server-side. |
 | `app.render` | Builds Bootstrap tables, cards, and forms from the schema. |
 | `app.messages` | Contextual action messages, confirm dialogs, and toasts. |
 | `app.util` | Small helpers (`escapeHtml`, `formToObject`, `capitalize`, `uuid`). |
@@ -34,6 +35,7 @@ When you use [`@simpleworkjs/backend`](https://github.com/simpleworkjs/backend),
 <script src="/lib/js/app.js"></script>
 <script src="/lib/js/app.model.js"></script>
 <script src="/lib/js/app.sync.js"></script>
+<script src="/lib/js/app.filter.js"></script>
 <script src="/lib/js/app.render.js"></script>
 <script src="/lib/js/app.custom.js"></script>
 <script src="/lib/js/app.validate.js"></script>
@@ -134,12 +136,81 @@ sub.remove(); // unsubscribe
 
 ## `app.sync`
 
-The sync layer listens for incoming `model:*` events, re-fetches the changed record, and publishes local refresh/remove events that the renderers react to — this is what makes tables and cards update live across browser tabs.
+The sync layer is what makes a page update by itself when anyone — another
+user, a background job, or this tab — changes a record.
+
+### Listening
 
 ```js
 app.sync.on('Task', 'update', function (data) { /* ... */ });
 app.sync.onAny(function (data) { /* every model change */ });
 ```
+
+### `app.sync.bind()` — live updates for a hand-written table
+
+`app.render`'s generated views are live automatically. `bind()` gives the same
+behaviour to a table you wrote yourself, without adopting the renderer:
+
+```js
+app.sync.bind('hosts', 'Host', {
+  key: 'host',            // pk field; defaults to the scope's jq-index-key
+  parse: hostParseRow,    // server record -> row object
+  filter: fn(row),        // optional: drop rows that don't belong in this list
+  fetch: fn(pk),          // optional: re-fetch when an event carries no body
+  reveal: true,           // scroll to + flash the changed row (default)
+  onChange: fn(),         // called after the scope changes
+});
+```
+
+It patches the single changed row rather than reloading the list, so scroll
+position, checkbox selection and open dropdowns survive someone else's edit.
+
+`bind()` normalizes both event dialects in use — the framework's
+`model:<Model>:<action>` with a `{model, action, pk, data}` payload, and the
+`model:<Model>:<action>:<pk>` form with a bare record — and works on either
+`app.pubsub` or a plain `app.subscribe` bus. Returns `{unbind()}`.
+
+## `app.filter`
+
+Search and facet filtering for a jq-repeat scope.
+
+```js
+const filter = app.filter.bind('hosts', {
+  input: '#hostSearch',              // search box
+  fields: ['host', 'ip', 'domain.provider'],  // nested paths allowed
+  facets: {
+    ssl: function (row, value) { return value === 'any' || row.is_wildcard === (value === 'wildcard'); },
+  },
+  count: '#hostCount',               // optional "3 of 40 shown" readout
+  threshold: 500,                    // switch to server mode above this
+  fetch: function (state) { ... },   // required for server mode
+});
+
+filter.set('ssl', 'wildcard');
+filter.clear();
+```
+
+The mode is chosen from the data rather than configured per view: a list
+filters in the browser until it outgrows `threshold`, then queries the server
+(debounced, with out-of-order responses discarded). Without a `fetch` it stays
+client-side at any size rather than silently filtering nothing.
+
+In client mode non-matching rows are hidden, not removed — clearing the search
+brings them straight back with no re-fetch.
+
+### `app.filter.live()` — filtering and live updates together
+
+```js
+const {filter, sync} = app.filter.live('hosts', 'Host', {
+  input: '#hostSearch',
+  fields: ['host', 'ip'],
+  parse: hostParseRow,
+});
+```
+
+Wires the two together so a row arriving over the socket is shown only if it
+matches the filter that's active right now — and is still there, ready to
+appear, when the filter is cleared.
 
 ## `app.messages`
 

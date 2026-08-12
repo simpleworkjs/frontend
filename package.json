@@ -1,10 +1,10 @@
 {
   "name": "@simpleworkjs/frontend",
-  "version": "0.2.7",
+  "version": "0.3.0",
   "description": "Browser-side JavaScript package for SimpleWorkJS apps",
   "main": "index.js",
   "scripts": {
-    "test": "node --test"
+    "test": "node --test test/*.test.js"
   },
   "keywords": [
     "simpleworkjs",
@@ -27,6 +27,7 @@
     "node": ">=18.0.0"
   },
   "devDependencies": {
+    "jq-repeat": "^2.2.0",
     "jquery": "^4.0.0",
     "jsdom": "^29.1.1",
     "mustache": "^4.2.0"
