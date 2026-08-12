@@ -254,3 +254,30 @@ test('bind() accepts the single-object form', function () {
 
   assert.strictEqual(scope[0].v, 'b');
 });
+
+test('a wrong pk in the topic does not duplicate the row', function () {
+  // Regression: publishers can emit a bogus pk (theta42's ModelPs published the
+  // class name for every model keyed on `name`, since a class always has one).
+  // The record's own key must win, or every update appends a second copy.
+  const {$, app, emit} = frameworkApp();
+  const scope = makeScope([{name: 'dns-team', role: 'a'}], 'name');
+  $.scope = {LocalGroup: scope};
+
+  app.sync.bind('LocalGroup', 'LocalGroup', {key: 'name', reveal: false});
+  emit('LocalGroup', 'update', 'LocalGroup', {name: 'dns-team', role: 'b'});
+
+  assert.strictEqual(scope.length, 1, 'patched the existing row, no duplicate');
+  assert.strictEqual(scope[0].role, 'b');
+});
+
+test('the topic pk is still used when the record has no key of its own', function () {
+  const {$, app, emit} = frameworkApp();
+  const scope = makeScope([{id: '1', v: 'a'}], 'id');
+  $.scope = {Task: scope};
+
+  app.sync.bind('Task', 'Task', {reveal: false});
+  emit('Task', 'update', '1', {v: 'b'});
+
+  assert.strictEqual(scope.length, 1);
+  assert.strictEqual(scope[0].v, 'b');
+});

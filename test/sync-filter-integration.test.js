@@ -162,3 +162,35 @@ test('a numeric primary key patches the right row through real jq-repeat', async
   assert.strictEqual($('tbody [jq-repeat-index="6"] .ip').text(), 'six', 'the other row untouched');
   assert.strictEqual(rowsInDom($).length, 2, 'no duplicate row inserted');
 });
+
+test('a row carrying a Bootstrap display utility is really hidden', async function () {
+  // Regression: .hide() writes a plain inline `display:none`, which loses to
+  // `.d-flex { display: flex !important }` from the stylesheet. Rows in
+  // list-groups and card grids stayed visible while the count claimed they
+  // were filtered out.
+  const {$, app, window} = setup(`
+    <style>.d-flex { display: flex !important; }</style>
+    <ul id="list">
+      <li class="d-flex" jq-repeat="perms" jq-index-key="id"><span class="h">{{subject}}</span></li>
+    </ul>`);
+  await tick();
+  $.scope.perms.push({id: '1', subject: 'alice'}, {id: '2', subject: 'bob'});
+  await tick();
+
+  const filter = app.filter.bind('perms', {fields: ['subject']});
+  filter.set('search', 'alice');
+  await tick(20);
+
+  const shown = $('#list li').filter(function () {
+    return window.getComputedStyle(this).display !== 'none';
+  }).map(function () { return $(this).find('.h').text(); }).get();
+  assert.deepStrictEqual(shown, ['alice'], 'the non-matching d-flex row is actually hidden');
+
+  filter.clear();
+  await tick(20);
+  const back = $('#list li').filter(function () {
+    return window.getComputedStyle(this).display !== 'none';
+  }).get();
+  assert.strictEqual(back.length, 2, 'clearing restores both');
+  assert.strictEqual(window.getComputedStyle(back[0]).display, 'flex', 'and restores the class display, not a hardcoded one');
+});

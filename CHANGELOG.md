@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.3.1
+
+Three fixes, all found by driving 0.3.0 in a real browser rather than a test DOM.
+
+### Fixed
+
+- **Filtered rows carrying a Bootstrap display utility were never actually
+  hidden.** `app.filter` used jQuery's `.hide()`, which writes a plain inline
+  `display: none` — and that loses to `.d-flex` / `.d-block` / `.d-grid`,
+  declared `!important` in Bootstrap's stylesheet. Any list-group row, card
+  grid cell or flex row stayed on screen while the filter's own count
+  correctly reported it as filtered out. Hiding now writes an `!important`
+  inline rule and restores the element's previous inline display on the way
+  back, so it falls back to its class exactly as before.
+- **The count denominator went stale.** A view that reports its server total
+  via `setTotal()` kept that number as the denominator forever, so a row
+  arriving live (or being deleted) produced readouts like "6 of 4 shown". In
+  client mode the browser holds the whole set, so the scope length is the
+  total; `setTotal` now only fixes the denominator in server mode, where the
+  browser really does hold just one page.
+- **A wrong pk in an event topic could duplicate a row.** `app.sync.bind()`
+  trusted the topic's pk over the record's own key. Publishers get this wrong:
+  theta42's `ModelPs` published the *class* name as the pk for every model
+  keyed on `name`, because a class always has a built-in `.name`. The lookup
+  then matched nothing and appended a second copy of the record on every
+  update. The record is now authoritative about its own identity, with the
+  topic pk as the fallback (still used for deletes, which carry no body).
+
 ## 0.3.0
 
 ### Added

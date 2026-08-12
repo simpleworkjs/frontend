@@ -265,3 +265,52 @@ test('live(): clearing the filter reveals rows that arrived while filtered', fun
   filter.clear();
   assert.deepStrictEqual(visible(scope).sort(), ['a', 'c']);
 });
+
+test('the count denominator tracks rows arriving live, not the initial total', function () {
+  // Regression: a view calls setTotal() with the server's count at load time.
+  // In client mode that number went stale as soon as a row arrived over the
+  // socket or was deleted, producing readouts like "6 of 4 shown".
+  const {$, app} = setup();
+  const scope = makeScope($, [{id: 'a', host: 'alpha'}, {id: 'b', host: 'beta'}], 'id');
+  $.scope = {hosts: scope};
+  const $count = $('<span id="count2">').appendTo('body');
+
+  const {filter} = app.filter.live('hosts', 'Host', {fields: ['host'], count: '#count2', reveal: false});
+  filter.setTotal(2);
+  filter.refresh();
+  assert.strictEqual($count.text(), '2 shown');
+
+  app.pubsub.publish('model:Host:create', {
+    model: 'Host', action: 'create', pk: 'c', data: {id: 'c', host: 'gamma'},
+  });
+  assert.strictEqual($count.text(), '3 shown', 'denominator grew with the live insert');
+
+  filter.set('search', 'alpha');
+  assert.strictEqual($count.text(), '1 of 3 shown');
+
+  app.pubsub.publish('model:Host:delete', {model: 'Host', action: 'delete', pk: 'b', data: null});
+  assert.strictEqual($count.text(), '1 of 2 shown', 'and shrank with the live delete');
+});
+
+test('server mode keeps using the server-reported total as the denominator', function (t, done) {
+  // The browser only holds one page there, so the scope length would understate
+  // the set.
+  const {$, app} = setup();
+  const scope = makeScope($, [], 'id');
+  $.scope = {hosts: scope};
+  const $count = $('<span id="count3">').appendTo('body');
+
+  const filter = app.filter.bind('hosts', {
+    fields: ['host'], count: '#count3', threshold: 0, debounce: 1,
+    fetch: function () {
+      return $.Deferred().resolve({results: [{id: 'z', host: 'zeta'}], total: 900}).promise();
+    },
+  });
+  filter.setTotal(900);
+  filter.set('search', 'zet');
+
+  setTimeout(function () {
+    assert.strictEqual($count.text(), '1 of 900 shown');
+    done();
+  }, 20);
+});
