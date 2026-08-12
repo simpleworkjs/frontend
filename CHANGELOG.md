@@ -1,5 +1,42 @@
 # Changelog
 
+## 0.4.0
+
+### Added
+
+- **`app.notify`**: a notification bell, feed and desktop notifications, driven
+  by the model events the framework already publishes. There is no separate
+  notification stream and no recipient resolution — a notification system's hard
+  problem is "who should see this", and the server's socket read gate already
+  answers it live, per row. A notification is an event that reached you, and
+  history is those events replayed through the same gate.
+  - Configurable per app via `app.notify.configure({links, endpoint,
+    collapseWindowMs, maxRows})`. `links` maps a model to a URL builder so
+    clicking a notification lands on the record that changed.
+  - Collapses same-model+action events inside a time window. This is not
+    cosmetic: one user action commonly writes several records — creating a
+    resource in a directory app emits eleven events, a bulk import emits
+    hundreds — so an uncollapsed feed is unusable. History keeps every row.
+  - Reads both event dialects, like `app.sync`: the framework's self-describing
+    `{model, action, pk, data}` and the topic-carried
+    `model:<Model>:<action>:<pk>` with a bare record. Written for one alone, the
+    feed is silently dead in an app using the other — the socket delivers events
+    and the badge never moves.
+  - Desktop notifications via the Web Notifications API: permission is only ever
+    requested from a click, nothing fires while the tab is focused, and repeats
+    of the same model+action reuse the `tag` so a burst replaces rather than
+    stacks.
+  - The bell reveals itself once the feed loads, rather than depending on an
+    app-specific "logged in" CSS class — those have a habit of diverging between
+    apps, and the bell then silently never appears.
+  - `init()` is idempotent: a shell may call it after `configure()`, and it also
+    runs on ready. Subscribing twice would count every event twice and fire two
+    desktop notifications for one change.
+  - Placeholder actors (`__NONE__`, written by a record created and never
+    updated) are not reported as the person who did it.
+  - A UUID primary key is left out of the wording, since it reads as noise, but
+    the row keeps its link to the record.
+
 ## 0.3.1
 
 Three fixes, all found by driving 0.3.0 in a real browser rather than a test DOM.
