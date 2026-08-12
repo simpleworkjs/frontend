@@ -18,6 +18,7 @@ Everything hangs off a global `app` object:
 | `app.socket` | Socket.IO client, wired into `app.pubsub` for live model events. |
 | `app.sync` | Live updates: bridges incoming `model:*` events into refresh events, and binds a jq-repeat scope to a model with `app.sync.bind()`. |
 | `app.filter` | Search/facet filtering for a jq-repeat scope, client-side or server-side. |
+| `app.notify` | Notification bell, feed and desktop notifications, driven by the same model events. |
 | `app.render` | Builds Bootstrap tables, cards, and forms from the schema. |
 | `app.messages` | Contextual action messages, confirm dialogs, and toasts. |
 | `app.util` | Small helpers (`escapeHtml`, `formToObject`, `capitalize`, `uuid`). |
@@ -36,6 +37,7 @@ When you use [`@simpleworkjs/backend`](https://github.com/simpleworkjs/backend),
 <script src="/lib/js/app.model.js"></script>
 <script src="/lib/js/app.sync.js"></script>
 <script src="/lib/js/app.filter.js"></script>
+<script src="/lib/js/app.notify.js"></script>
 <script src="/lib/js/app.render.js"></script>
 <script src="/lib/js/app.custom.js"></script>
 <script src="/lib/js/app.validate.js"></script>
@@ -283,3 +285,76 @@ string when it isn't; the message is written into the nearest
 ## License
 
 MIT
+
+## `app.notify`
+
+Notifications, without a notification system.
+
+A notification system's hard problem is *"who should see this"* — and the
+server's socket read gate already answers it, live, per row, every time an event
+goes out. So there is no recipient resolution and no fan-out: **a notification is
+an event that reached you**, and history is those same events replayed through
+the same gate.
+
+```js
+app.notify.configure({
+  links: {
+    Host: (pk) => '/hosts/' + encodeURIComponent(pk),
+    Permission: () => '/permissions',
+  },
+});
+```
+
+Everything is optional:
+
+| option | default | |
+|---|---|---|
+| `endpoint` | `'activity'` | feed + watermark path, relative to `app.api`'s base |
+| `links` | `{}` | `model -> (pk) => url`; a model with no entry renders unlinked |
+| `collapseWindowMs` | `60000` | how long same-model+action events collapse together |
+| `maxRows` | `30` | rendered rows; history keeps everything the server returns |
+
+### Markup
+
+Binds by id, so the shell owns the styling:
+
+```html
+<div id="notify-bell" style="display:none">
+  <span id="notify-badge" style="display:none">0</span>
+  <a id="notify-desktop-toggle"></a>
+  <ul id="notify-list"></ul>
+</div>
+```
+
+The bell reveals itself once the feed loads — that proves both a session and the
+endpoint, and avoids depending on an app-specific "logged in" CSS class.
+
+### What the server must expose
+
+```
+GET  <endpoint>       -> {results: [{model, action, target, actor, created_on}], unread, seen_at}
+PUT  <endpoint>/seen  <- {seen_at}
+```
+
+Store the **shape** of each event, not its payload — `model, action, pk, actor,
+timestamp` is all the feed renders, and not storing bodies means history never
+becomes a second copy of your data retaining a deleted record's contents. Filter
+the replay through the same read gate that decided live delivery.
+
+"Unread" is one watermark per user rather than a read flag per item, so opening
+the bell on one device clears the badge on all of them.
+
+### Collapsing
+
+One user action commonly writes several records — creating a resource in a
+directory app emits eleven events, and a bulk import emits hundreds. The feed
+groups same-model+action events inside `collapseWindowMs` and says "203
+resources updated"; history keeps every row.
+
+### Desktop notifications
+
+Uses the Web Notifications API, and stays out of the way: permission is **only
+ever requested from a click** on `#notify-desktop-toggle`, and nothing fires
+**while the tab is focused** — you are already looking at the page that just
+updated itself. Repeats of the same model+action reuse the notification `tag`,
+so a burst replaces rather than stacks.
