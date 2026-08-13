@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.4.1
+
+### Fixed
+
+- **`app.messages.confirm(message, null, type)` threw instead of showing a
+  dialog.** `renderActionHtml` called `.closest()` directly on whatever
+  `$target` it was passed, so a page that calls `confirm()` with no inline
+  `.actionMessage` target (a documented, commonly-used form — the caller
+  passes `null` when it wants the toast fallback) crashed with `Cannot read
+  properties of null (reading 'closest')` before the Confirm/Cancel buttons
+  were ever wired up. `$targetPassed` is now normalized to an empty jQuery
+  object when it isn't one already.
+- **`confirm()` had no toast fallback at all** — unlike `action()`, the
+  "no `.actionMessage` on this page" path just logged a console warning and
+  left the returned promise pending forever, so a confirm button on a page
+  with no inline target looked like it silently did nothing (worse than the
+  crash above once that was fixed on its own). `confirm()` now renders its
+  dialog into a non-autohiding, non-dismissable toast in that case — same
+  escalation `action()` already used for a plain message, extended to host
+  interactive buttons.
+
 ## 0.4.0
 
 ### Added

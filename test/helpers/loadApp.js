@@ -31,12 +31,24 @@ function loadApp(files) {
   global.window = prevWindow;
   global.document = prevDocument;
   // jsdom already implements window.crypto.randomUUID; nothing to stub there.
-  // Minimal Bootstrap Toast stub — app.messages.js only calls `new
-  // bootstrap.Toast(el)` and `.show()`.
+  // Minimal Bootstrap Toast stub — app.messages.js calls
+  // `new bootstrap.Toast(el, opts)`, `.show()`, `.hide()`, and
+  // `bootstrap.Toast.getInstance(el)` (confirm()'s fallback-toast path
+  // dismisses itself programmatically rather than via the close button).
+  // Real Bootstrap fires `hidden.bs.toast` asynchronously after a fade
+  // transition; the stub fires it synchronously from hide() since nothing
+  // here depends on transition timing.
+  const toastInstances = new Map();
   window.bootstrap = {
-    Toast: function ToastStub(el) {
+    Toast: function ToastStub(el, opts) {
       this.el = el;
+      this.opts = opts || {};
       this.show = function () { el.classList.add('show'); };
+      this.hide = function () {
+        el.classList.remove('show');
+        window.$(el).trigger('hidden.bs.toast');
+      };
+      toastInstances.set(el, this);
     },
     // Minimal Bootstrap Modal stub — app.modal only calls
     // getOrCreateInstance(el).show()/.hide().
@@ -74,6 +86,7 @@ function loadApp(files) {
       },
     },
   };
+  window.bootstrap.Toast.getInstance = function (el) { return toastInstances.get(el) || null; };
 
   // jq-repeat.js (loaded in some integration tests) uses Mustache for its
   // `{{field}}` templating, exactly as the browser does via the CDN script.
