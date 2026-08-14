@@ -262,3 +262,50 @@ test('init is idempotent, so an event is never counted twice', async function ()
   await tick();
   assert.strictEqual(app.notify.unread, 1);
 });
+
+test('model icons render in dropdown and custom icons can be configured', async function () {
+  const {$, app, emit} = frameworkApp();
+  app.notify.configure({
+    icons: { CustomModel: 'fa-solid fa-star text-gold' }
+  });
+  app.notify.init();
+  await tick();
+  emit('Host', 'create', 'server1', {});
+  emit('CustomModel', 'update', 'item1', {});
+  await tick();
+
+  assert.ok($('#notify-list').html().includes('fa-server'));
+  assert.ok($('#notify-list').html().includes('fa-star text-gold'));
+});
+
+test('toast notifications are raised when toast is enabled in focused tab', async function () {
+  const {app, window, emit} = frameworkApp();
+  const toasts = [];
+  app.messages = { toast: (msg, type) => toasts.push({msg, type}) };
+  app.notify.configure({ toast: true });
+  Object.defineProperty(window.document, 'hidden', {configurable: true, get: () => false});
+
+  app.notify.init();
+  await tick();
+  emit('Host', 'create', 'node1', {});
+  await tick();
+
+  assert.strictEqual(toasts.length, 1);
+  assert.strictEqual(toasts[0].type, 'success');
+  assert.match(toasts[0].msg, /host added: node1/);
+});
+
+test('clear() empties events and pushes seen_at watermark', async function () {
+  const {app, puts, emit} = frameworkApp();
+  app.notify.init();
+  await tick();
+  emit('Host', 'create', 'node1', {});
+  await tick();
+  assert.strictEqual(app.notify.events.length, 1);
+
+  app.notify.clear();
+  assert.strictEqual(app.notify.events.length, 0);
+  assert.strictEqual(app.notify.unread, 0);
+  assert.strictEqual(puts.length > 0, true);
+});
+

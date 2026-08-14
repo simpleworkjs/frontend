@@ -1,6 +1,6 @@
 {
   "name": "@simpleworkjs/frontend",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "Browser-side JavaScript package for SimpleWorkJS apps",
   "main": "index.js",
   "scripts": {

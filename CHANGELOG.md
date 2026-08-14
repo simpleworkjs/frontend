@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4.2
+
+### Added
+
+- **`app.notify` rich model icons & live foreground toasts**:
+  - Automatically renders FontAwesome category icons in notification rows (`User`, `Group`, `Host`, `Resource`, `Service`, `Cert`, `ApiToken`, `MeshSite`, `MeshClient`, `AccessRequest`, etc.). Configurable per-app with `app.notify.configure({icons: {...}})`.
+  - Added live foreground toast popup support (`config.toast: true`), seamlessly invoking `app.messages.toast` when an authorized event arrives while the tab is active.
+  - Added `app.notify.clear()` to empty client event history and advance the watermark.
+  - Bound `#notify-mark-read` and `#notify-clear` buttons for interactive dropdown control.
+
 ## 0.4.1
 
 ### Fixed
