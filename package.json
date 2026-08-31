@@ -27,7 +27,7 @@
     "node": ">=18.0.0"
   },
   "devDependencies": {
-    "jq-repeat": "^2.2.0",
+    "jq-repeat": "^2.2.2",
     "jquery": "^4.0.0",
     "jsdom": "^29.1.1",
     "mustache": "^4.2.0"
