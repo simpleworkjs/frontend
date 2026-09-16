@@ -1,5 +1,6 @@
 node_modules/
-package-lock.json
+# package-lock.json is COMMITTED on purpose: CI installs with `npm ci`,
+# which requires it, and a published package wants reproducible installs.
 *.log
 .DS_Store
 dist/
