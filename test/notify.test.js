@@ -309,3 +309,53 @@ test('clear() empties events and pushes seen_at watermark', async function () {
   assert.strictEqual(puts.length > 0, true);
 });
 
+
+// A tab left open on a page whose models churn on a timer used to accumulate
+// every event for the life of the session, and re-collapse the whole array on
+// each new one. theta-directory reached multiple GB and the tab was killed.
+test('a long-lived socket stream does not grow the event list without bound', async function () {
+  const {app} = frameworkApp({results: [], unread: 0, seen_at: 0});
+  app.notify.init();
+  await tick();
+
+  const max = app.notify.config().maxEvents;
+  // Well past the cap, and past any single burst a real page produces.
+  for (let i = 0; i < max * 5; i++) app.notify.push({model: 'Resource', action: 'update', pk: 'r' + i}, null);
+
+  assert.strictEqual(app.notify.events.length, max);
+  // Newest-first: the cap drops the OLDEST, never the event that just arrived.
+  assert.strictEqual(app.notify.events[0].target, 'r' + (max * 5 - 1));
+  assert.strictEqual(app.notify.unread, max * 5);
+});
+
+test('the server feed is capped the same way as the live stream', async function () {
+  const now = Date.now();
+  // A server that hands back more history than the feed will ever render.
+  const results = Array.from({length: 5000}, (_, i) => ({
+    model: 'Resource', action: 'update', target: 'r' + i, created_on: now - i * 1000,
+  }));
+  const {app} = frameworkApp({results, unread: 5000, seen_at: 0});
+  app.notify.init();
+  await tick();
+  assert.strictEqual(app.notify.events.length, app.notify.config().maxEvents);
+});
+
+// collapse() stops early now; the rows that get rendered must be identical to
+// what a full walk produced.
+test('early-exit collapsing renders the same rows as a full walk', async function () {
+  const now = Date.now();
+  // Alternating models so nothing collapses -- the worst case for early exit,
+  // and the one where an off-by-one would show.
+  const results = Array.from({length: 200}, (_, i) => ({
+    model: i % 2 ? 'Host' : 'Resource', action: 'update', target: 't' + i, created_on: now - i,
+  }));
+  const {$, app} = frameworkApp({results, unread: 0, seen_at: 0});
+  app.notify.init();
+  await tick();
+
+  const rows = $('#notify-list a span:first-child').map(function () { return $(this).text(); }).get();
+  assert.strictEqual(rows.length, app.notify.config().maxRows);
+  assert.strictEqual(rows[0], 'resource updated: t0');
+  assert.strictEqual(rows[1], 'host updated: t1');
+  assert.strictEqual(rows[rows.length - 1], 'host updated: t' + (app.notify.config().maxRows - 1));
+});

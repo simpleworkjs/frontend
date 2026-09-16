@@ -1,5 +1,40 @@
 # Changelog
 
+## 0.4.3
+
+### Fixed
+
+- **`app.notify` grew without bound and re-collapsed its whole history on every
+  event.** The feed subscribes to every model event for the life of the tab and
+  unshifted each one onto `app.notify.events`, which nothing ever trimmed -- the
+  cap was on *rendered rows*, not on retained events. Worse, `push()` called
+  `render()`, and `render()` called `collapse(this.events)` over the entire
+  array, allocating a fresh group object for every non-collapsing entry and then
+  discarding all but the first `maxRows`. The cost of one arriving event was
+  therefore O(history), on an array that only ever grew.
+
+  Harmless on a quiet page; not on one whose models churn on a timer. In
+  theta-directory a discovery poll rewrites `last_seen` on every discovered
+  guest, and each write publishes `model:Resource:update`, so a Directory tab
+  left open accumulated events all day until the tab was killed at multiple GB.
+
+  Two changes: `events` is now capped at `config.maxEvents` (default 1000,
+  trimming oldest-first on both the live path and the server feed), and
+  `collapse()` takes a limit and stops once it has enough groups. Collapsing is
+  strictly local -- an event only ever merges into the group immediately before
+  it -- so the rendered rows are byte-identical to a full walk.
+
+  The cap is deliberately well above `maxRows` (30) so collapse counts stay
+  honest: the feed's job is to say "203 resources updated", not "30". A burst
+  longer than `maxEvents` undercounts at its tail, which is the right thing to
+  lose. `unread` is unaffected -- it still counts every event that arrived.
+
+### Added
+
+- `app.notify` config key **`maxEvents`** (default 1000): cap on events retained
+  in memory, independent of `maxRows`.
+
+
 ## 0.4.2
 
 ### Added
