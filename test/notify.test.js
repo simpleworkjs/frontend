@@ -12,6 +12,7 @@ const SHELL = `
     <span id="notify-badge" style="display:none">0</span>
     <a id="notify-desktop-toggle"></a>
     <ul id="notify-list"></ul>
+    <div id="notify-filters"></div>
   </div>`;
 
 // The framework stack: app.js provides app.pubsub, and events are
@@ -207,13 +208,19 @@ test('desktop notifications stay silent while the tab is focused', async functio
   window.Notification = Fake;
   Object.defineProperty(window.document, 'hidden', {configurable: true, get: () => false});
 
+  // Popups are held for `burstMs` and collapsed; a short window keeps this
+  // test about the focused/hidden gate rather than about timing.
+  app.notify.configure({ burstMs: 5 });
+
   app.notify.init();
   await tick();
   app.notify.push({model: 'Host', action: 'create', pk: 'a', data: {}});
+  await tick(40);
   assert.strictEqual(fired.length, 0, 'you are already looking at the page');
 
   Object.defineProperty(window.document, 'hidden', {configurable: true, get: () => true});
   app.notify.push({model: 'Host', action: 'create', pk: 'b', data: {}});
+  await tick(40);
   assert.strictEqual(fired.length, 1);
   // Same tag replaces rather than stacks, so a burst is one desktop popup.
   assert.strictEqual(fired[0].opts.tag, 'theta-Host:create');
@@ -278,21 +285,108 @@ test('model icons render in dropdown and custom icons can be configured', async 
   assert.ok($('#notify-list').html().includes('fa-star text-gold'));
 });
 
-test('toast notifications are raised when toast is enabled in focused tab', async function () {
-  const {app, window, emit} = frameworkApp();
+// Toasts are held for `burstMs` and collapsed, so a short window is configured
+// here rather than waiting most of a second in every test.
+function toastApp(window, app, options) {
   const toasts = [];
   app.messages = { toast: (msg, type) => toasts.push({msg, type}) };
-  app.notify.configure({ toast: true });
+  app.notify.configure(Object.assign({ toast: true, burstMs: 5 }, options || {}));
   Object.defineProperty(window.document, 'hidden', {configurable: true, get: () => false});
+  return toasts;
+}
+
+test('toast notifications are raised when toast is enabled in focused tab', async function () {
+  const {app, window, emit} = frameworkApp();
+  const toasts = toastApp(window, app);
 
   app.notify.init();
   await tick();
   emit('Host', 'create', 'node1', {});
-  await tick();
+  await tick(40);
 
   assert.strictEqual(toasts.length, 1);
   assert.strictEqual(toasts[0].type, 'success');
   assert.match(toasts[0].msg, /host added: node1/);
+});
+
+// The complaint this exists for: "I'm getting a lot of notifications at once."
+//
+// Events do not arrive one at a time. A directory's status evaluator walks
+// every resource and writes the ones that changed; a discovery poll touches
+// `last_seen` on every guest. Each write is its own model event, so one sweep
+// delivers dozens inside a second.
+//
+// The bell LIST always handled that -- render() collapses the whole history.
+// The toast path called `collapse([event])` on an array of exactly ONE event,
+// which can never merge and is a no-op wrapper, so the same sweep that made one
+// tidy row also fired one toast per event.
+test('a burst of same-kind events raises ONE collapsed toast', async function () {
+  const {app, window, emit} = frameworkApp();
+  const toasts = toastApp(window, app);
+
+  app.notify.init();
+  await tick();
+  for (let i = 0; i < 42; i++) emit('Resource', 'update', 'r' + i, {});
+  await tick(40);
+
+  assert.strictEqual(toasts.length, 1, 'one sweep should be one toast');
+  assert.match(toasts[0].msg, /42 resources updated/);
+  // The list is unaffected -- it was already correct, and still holds it all.
+  assert.strictEqual(app.notify.events.length, 42);
+  assert.strictEqual(app.notify.unread, 42);
+});
+
+test('a burst spanning several kinds is capped', async function () {
+  const {app, window, emit} = frameworkApp();
+  const toasts = toastApp(window, app, { maxToastsPerBurst: 2 });
+
+  app.notify.init();
+  await tick();
+  // Alternating kinds: nothing collapses, so this is the worst case.
+  for (let i = 0; i < 30; i++) emit(i % 3 === 0 ? 'Resource' : (i % 3 === 1 ? 'Host' : 'User'), 'update', 't' + i, {});
+  await tick(40);
+
+  assert.ok(toasts.length <= 2, 'got ' + toasts.length + ' toasts, expected at most 2');
+  assert.strictEqual(app.notify.events.length, 30, 'the bell still holds every event');
+});
+
+test('a continuous stream is reported once it settles, not every window', async function () {
+  const {app, window, emit} = frameworkApp();
+  const toasts = toastApp(window, app, { burstMs: 30 });
+
+  app.notify.init();
+  await tick();
+  // Arrivals closer together than the window: the timer keeps being pushed out.
+  for (let i = 0; i < 5; i++) { emit('Resource', 'update', 'r' + i, {}); await tick(10); }
+  await tick(60);
+
+  assert.strictEqual(toasts.length, 1);
+  assert.match(toasts[0].msg, /5 resources updated/);
+});
+
+test('burstMs: 0 restores one toast per event', async function () {
+  const {app, window, emit} = frameworkApp();
+  const toasts = toastApp(window, app, { burstMs: 0 });
+
+  app.notify.init();
+  await tick();
+  for (let i = 0; i < 3; i++) emit('Resource', 'update', 'r' + i, {});
+  await tick(40);
+
+  assert.strictEqual(toasts.length, 3);
+});
+
+test('clearing the feed cancels toasts that have not popped yet', async function () {
+  const {app, window, emit} = frameworkApp();
+  const toasts = toastApp(window, app, { burstMs: 30 });
+
+  app.notify.init();
+  await tick();
+  emit('Resource', 'update', 'r1', {});
+  app.notify.clear();
+  await tick(60);
+
+  assert.strictEqual(toasts.length, 0, 'cleared the feed, then got toasted for it anyway');
 });
 
 test('clear() empties events and pushes seen_at watermark', async function () {
@@ -358,4 +452,264 @@ test('early-exit collapsing renders the same rows as a full walk', async functio
   assert.strictEqual(rows[0], 'resource updated: t0');
   assert.strictEqual(rows[1], 'host updated: t1');
   assert.strictEqual(rows[rows.length - 1], 'host updated: t' + (app.notify.config().maxRows - 1));
+});
+
+// ---------------------------------------------------------------------------
+// Muting.
+//
+// The feed subscribes to every model event the socket delivers. That is right
+// for a change log and wrong for a person: most of the volume is routine churn
+// -- a status evaluator rewriting `status`, a discovery poll touching
+// `last_seen` -- and the events worth seeing are buried in it.
+//
+// A mute is a VIEW, not a filter on what is recorded, so unmuting shows the
+// history you had been ignoring rather than a gap.
+
+function mutedApp(feed, mutes) {
+  const ctx = frameworkApp(feed);
+  // Isolate from whatever a previous test persisted.
+  try { ctx.window.localStorage.clear(); } catch (e) {}
+  ctx.app.notify.configure({mutes: mutes || [], mutesKey: 'test.mutes.' + Math.random()});
+  return ctx;
+}
+
+test('a muted model is hidden from the list, and does not count as unread', async function () {
+  const {app, emit, $} = mutedApp(undefined, ['Resource']);
+  app.notify.init();
+  await tick();
+
+  for (let i = 0; i < 5; i++) emit('Resource', 'update', 'r' + i, {});
+  emit('User', 'create', 'alice', {});
+  await tick();
+
+  const rows = $('#notify-list a span:first-child').map(function () { return $(this).text(); }).get();
+  assert.strictEqual(rows.length, 1);
+  assert.match(rows[0], /user added: alice/);
+  assert.strictEqual(app.notify.unread, 1, 'muting something should stop the badge nagging');
+});
+
+test('muted events are still retained, so unmuting reveals the history', async function () {
+  const {app, emit, $} = mutedApp(undefined, ['Resource']);
+  app.notify.init();
+  await tick();
+  for (let i = 0; i < 5; i++) emit('Resource', 'update', 'r' + i, {});
+  await tick();
+
+  assert.strictEqual(app.notify.events.length, 5, 'recorded but not shown');
+  assert.strictEqual($('#notify-list a').length, 0);
+
+  app.notify.unmute('Resource');
+  const rows = $('#notify-list a span:first-child').map(function () { return $(this).text(); }).get();
+  assert.strictEqual(rows.length, 1);
+  assert.match(rows[0], /5 resources updated/);
+});
+
+test("'*:update' mutes routine churn across every model", async function () {
+  // The key the "hide updates" button sets: a status sweep and a discovery poll
+  // both write updates, across whichever models they touch.
+  const {app, emit, $} = mutedApp(undefined, ['*:update']);
+  app.notify.init();
+  await tick();
+
+  emit('Resource', 'update', 'r1', {});
+  emit('Host', 'update', 'h1', {});
+  emit('Resource', 'create', 'r2', {});
+  await tick();
+
+  const rows = $('#notify-list a span:first-child').map(function () { return $(this).text(); }).get();
+  assert.strictEqual(rows.length, 1);
+  assert.match(rows[0], /resource added: r2/);
+});
+
+test("'Model:action' mutes one pair without muting the model", async function () {
+  const {app, emit, $} = mutedApp(undefined, ['Resource:update']);
+  app.notify.init();
+  await tick();
+
+  emit('Resource', 'update', 'r1', {});
+  emit('Resource', 'delete', 'r2', {});
+  await tick();
+
+  const rows = $('#notify-list a span:first-child').map(function () { return $(this).text(); }).get();
+  assert.strictEqual(rows.length, 1);
+  assert.match(rows[0], /resource removed: r2/);
+  assert.strictEqual(app.notify.isMuted('Resource', 'update'), true);
+  assert.strictEqual(app.notify.isMuted('Resource', 'delete'), false);
+});
+
+test('a muted kind raises no toast', async function () {
+  const {app, window, emit} = mutedApp(undefined, ['Resource']);
+  const toasts = toastApp(window, app);
+  app.notify.configure({mutes: ['Resource']});
+  app.notify.init();
+  await tick();
+
+  emit('Resource', 'update', 'r1', {});
+  await tick(40);
+  assert.strictEqual(toasts.length, 0);
+
+  emit('User', 'create', 'alice', {});
+  await tick(40);
+  assert.strictEqual(toasts.length, 1);
+});
+
+test('mutes survive a reload through storage', async function () {
+  const key = 'test.mutes.persist';
+  const first = frameworkApp();
+  try { first.window.localStorage.clear(); } catch (e) {}
+  first.app.notify.configure({mutes: [], mutesKey: key});
+  first.app.notify.init();
+  await tick();
+  first.app.notify.mute('Resource');
+  const stored = first.window.localStorage.getItem(key);
+  assert.deepStrictEqual(JSON.parse(stored), ['Resource']);
+});
+
+test('a corrupt stored preference does not break the feed', async function () {
+  const key = 'test.mutes.corrupt';
+  const {app, window, emit, $} = frameworkApp();
+  window.localStorage.setItem(key, 'not json at all');
+  app.notify.configure({mutes: [], mutesKey: key});
+  app.notify.init();
+  await tick();
+  emit('User', 'create', 'alice', {});
+  await tick();
+  assert.strictEqual($('#notify-list a').length, 1);
+});
+
+test('the filter panel is built from what is actually in the feed', async function () {
+  const {app, emit, $} = mutedApp();
+  app.notify.init();
+  await tick();
+  emit('Resource', 'update', 'r1', {});
+  emit('Resource', 'update', 'r2', {});
+  emit('User', 'create', 'alice', {});
+  await tick();
+
+  const labels = $('#notify-filters button').map(function () { return $(this).text(); }).get();
+  assert.ok(labels.some((t) => /^resource 2$/.test(t)), 'got: ' + labels.join(' | '));
+  assert.ok(labels.some((t) => /^user 1$/.test(t)));
+  assert.ok(labels.some((t) => /hide updates/.test(t)));
+  // A model nobody emits never clutters the panel.
+  assert.ok(!labels.some((t) => /mesh/.test(t)));
+});
+
+test('a muted model stays listed so the mute can be undone', async function () {
+  const {app, emit, $} = mutedApp();
+  app.notify.init();
+  await tick();
+  emit('Resource', 'update', 'r1', {});
+  await tick();
+
+  app.notify.mute('Resource');
+  const labels = $('#notify-filters button').map(function () { return $(this).text(); }).get();
+  assert.ok(labels.some((t) => /resource/.test(t)), 'a mute you cannot see is a mute you cannot undo');
+});
+
+test('everything muted reads as muted, not as empty', async function () {
+  const {app, emit, $} = mutedApp(undefined, ['Resource']);
+  app.notify.init();
+  await tick();
+  emit('Resource', 'update', 'r1', {});
+  await tick();
+  assert.match($('#notify-list').text(), /everything recent is muted/i);
+});
+
+test('the filter panel is not rebuilt on every event in a burst', async function () {
+  // render() runs per arriving event and a status sweep delivers dozens. The
+  // panel only changes structurally when the model set or the mutes change;
+  // counts alone must retext the existing buttons, not rebuild them.
+  const {app, emit, $} = mutedApp();
+  app.notify.init();
+  await tick();
+  emit('Resource', 'update', 'r0', {});
+  await tick();
+
+  const first = $('#notify-filters button')[0];
+  for (let i = 1; i < 20; i++) emit('Resource', 'update', 'r' + i, {});
+  await tick();
+
+  assert.strictEqual($('#notify-filters button')[0], first, 'buttons were rebuilt');
+  // ...and the count still tracked.
+  const labels = $('#notify-filters button').map(function () { return $(this).text(); }).get();
+  assert.ok(labels.some((t) => /^resource 20$/.test(t)), 'got: ' + labels.join(' | '));
+});
+
+test('the panel does rebuild when a mute changes', async function () {
+  const {app, emit, $} = mutedApp();
+  app.notify.init();
+  await tick();
+  emit('Resource', 'update', 'r0', {});
+  await tick();
+
+  const before = $('#notify-filters button')[0];
+  app.notify.mute('Resource');
+  assert.notStrictEqual($('#notify-filters button')[0], before);
+});
+
+// ---------------------------------------------------------------------------
+// Naming UUID-keyed events.
+//
+// readableTarget() suppresses UUIDs, which is right -- a UUID in a sentence is
+// noise. The consequence was that a UUID-keyed model rendered as a bare
+// "access request created": no who, no what. Correct for a change log, useless
+// as a notification, and it hit exactly the models a person cares about most.
+
+test('a configured title names an event whose pk is a UUID', async function () {
+  const {app, emit, $} = frameworkApp();
+  app.notify.configure({
+    titles: { AccessRequest: (r) => r.uid + ' → ' + r.groupCn },
+  });
+  app.notify.init();
+  await tick();
+
+  emit('AccessRequest', 'create', '3f1b8c2e-7a4d-4b1e-9c5a-2d6e8f0a1b3c',
+       {uid: 'alice', groupCn: 'site_x_app_emby_access'});
+  await tick();
+
+  const row = $('#notify-list a span:first-child').first().text();
+  assert.match(row, /access request added: alice → site_x_app_emby_access/);
+});
+
+test('without a title a UUID is still suppressed', async function () {
+  const {app, emit, $} = frameworkApp();
+  app.notify.init();
+  await tick();
+  emit('AccessRequest', 'create', '3f1b8c2e-7a4d-4b1e-9c5a-2d6e8f0a1b3c', {uid: 'alice'});
+  await tick();
+  assert.strictEqual($('#notify-list a span:first-child').first().text().trim(), 'access request added');
+});
+
+test('a collapsed group counts rather than naming one of them', async function () {
+  const {app, emit, $} = frameworkApp();
+  app.notify.configure({ titles: { AccessRequest: (r) => r.uid } });
+  app.notify.init();
+  await tick();
+  for (let i = 0; i < 4; i++) emit('AccessRequest', 'create', 'id' + i, {uid: 'u' + i});
+  await tick();
+
+  const row = $('#notify-list a span:first-child').first().text();
+  assert.match(row, /4 access requests added/);
+});
+
+test('a throwing title function does not take the feed down', async function () {
+  const {app, emit, $} = frameworkApp();
+  app.notify.configure({ titles: { Resource: () => { throw new Error('bad record'); } } });
+  app.notify.init();
+  await tick();
+  emit('Resource', 'create', 'r1', {});
+  await tick();
+  assert.strictEqual($('#notify-list a').length, 1);
+});
+
+test('a title is escaped like any other text', async function () {
+  // Titles are derived from server records, which carry user-written fields.
+  const {app, emit, $} = frameworkApp();
+  app.notify.configure({ titles: { AccessRequest: (r) => r.uid } });
+  app.notify.init();
+  await tick();
+  emit('AccessRequest', 'create', 'id1', {uid: '<img src=x onerror=alert(1)>'});
+  await tick();
+  assert.strictEqual($('#notify-list img').length, 0);
+  assert.match($('#notify-list').html(), /&lt;img/);
 });
