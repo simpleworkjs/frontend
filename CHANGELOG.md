@@ -1,5 +1,57 @@
 # Changelog
 
+## 0.5.0
+
+The notification feed grows a way to turn itself down. It subscribed to every
+model event the socket delivered and showed all of them, which is right for a
+change log and wrong for a person.
+
+### Added
+- **Muting.** Three key shapes, matched cheapest-first: `'Resource:update'`
+  (one model, one action), `'Resource'` (one model, every action) and
+  `'*:update'` (one action, every model). An app ships defaults via
+  `configure({mutes})`; the viewer's own choices layer on top and persist in
+  `localStorage` under `config.mutesKey`.
+
+  A mute is a **view**, not a filter on what is recorded. Events keep arriving
+  and keep being retained, so unmuting shows the history you had been ignoring
+  rather than a gap -- which is what makes muting safe to experiment with. A
+  muted kind does not count toward unread and does not raise a toast, because
+  muting something that still nags has not really been muted.
+- **A filter UI**, rendered into `#notify-filters` when the shell provides that
+  element. The controls are derived from the models actually present in the
+  feed rather than a fixed list: you filter the noise you can see, a model
+  nobody emits never clutters the panel, and a muted model stays listed so the
+  mute can be undone. Absent the element, muting still works through config and
+  the `mute`/`unmute`/`toggleMute`/`isMuted`/`mutes` API.
+- **`config.titles`** -- `model -> (record) => string`, for naming an event
+  whose primary key is a UUID. `readableTarget()` suppresses UUIDs, which is
+  right (a UUID in a sentence is noise) and left a UUID-keyed model rendering
+  as a bare "access request added": no who, no what. Precisely the models where
+  the pk is the least interesting thing about the record. A title is escaped
+  like any other text, and a throwing title function cannot take the feed down.
+
+### Fixed
+- **A burst of events raised a burst of toasts.** `push()` called
+  `collapse([event])` -- an array of exactly ONE event, which can never merge
+  with anything and is a no-op wrapper -- so every arriving event popped its own
+  toast and its own desktop notification. Meanwhile the bell LIST collapsed
+  correctly, so the same sweep that produced one tidy "42 resources updated" row
+  also stacked 42 toasts beside it.
+
+  Events do not arrive one at a time: a directory's status evaluator walks every
+  resource and writes the ones that changed, and a discovery poll touches
+  `last_seen` on every guest it found. Toasts and desktop popups now buffer for
+  `config.burstMs` (900ms, reset on each arrival so a continuous stream reports
+  once when it settles) and go through the same `collapse()` the list uses,
+  capped at `config.maxToastsPerBurst`. `burstMs: 0` restores the old
+  one-per-event behaviour, and clearing the feed cancels anything pending.
+- **The filter panel is not rebuilt on every event.** `render()` runs per
+  arriving event, so the structure (which models, which mutes) gates a rebuild
+  while counts alone retext the buttons already there. Signing over the counts
+  would have defeated this entirely -- they change on every single event, which
+  is the case it exists for.
+
 ## 0.4.3
 
 ### Fixed
